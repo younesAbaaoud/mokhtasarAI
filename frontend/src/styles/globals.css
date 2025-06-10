@@ -1,0 +1,84 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --cream: #f3f3e7;
+    --navy: #133E87;
+    --blue: #608BC1;
+    --blue-light: #CBDCEB;
+    
+    --background: var(--cream);
+    --foreground: var(--navy);
+    --card: var(--cream);
+    --card-foreground: var(--navy);
+    --popover: var(--cream);
+    --popover-foreground: var(--navy);
+    --primary: var(--navy);
+    --primary-foreground: var(--cream);
+    --secondary: var(--blue);
+    --secondary-foreground: var(--cream);
+    --muted: var(--cream);
+    --muted-foreground: var(--navy);
+    --accent: var(--blue);
+    --accent-foreground: var(--cream);
+    --destructive: rgb(239 68 68);
+    --destructive-foreground: var(--cream);
+    --border: var(--blue-light);
+    --input: var(--blue-light);
+    --ring: var(--blue);
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: var(--navy);
+    --foreground: var(--cream);
+    --card: var(--navy);
+    --card-foreground: var(--cream);
+    --popover: var(--navy);
+    --popover-foreground: var(--cream);
+    --primary: var(--cream);
+    --primary-foreground: var(--navy);
+    --secondary: var(--blue);
+    --secondary-foreground: var(--cream);
+    --muted: var(--navy);
+    --muted-foreground: var(--blue-light);
+    --accent: var(--blue);
+    --accent-foreground: var(--cream);
+    --destructive: rgb(239 68 68);
+    --destructive-foreground: var(--cream);
+    --border: var(--blue);
+    --input: var(--blue);
+    --ring: var(--blue-light);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Animations pour les liens et boutons */
+@layer components {
+  .hover-link-effect {
+    @apply relative inline-block overflow-hidden;
+  }
+  
+  .hover-link-effect::after {
+    @apply content-[''] absolute bottom-0 left-0 w-0 h-0.5 bg-blue transition-all duration-300 ease-in-out;
+  }
+  
+  .hover-link-effect:hover::after {
+    @apply w-full;
+  }
+  
+  .card-hover-effect {
+    @apply transition-all duration-300 hover:shadow-lg hover:-translate-y-1;
+  }
+}
