@@ -31,11 +31,11 @@ export default function Sidebar() {
   const { logout } = useAuth();
 
   const navItems = [
-    { name: "Upload Audio", icon: <Upload size={22} />, path: "/professeur/dashboard" },
-    { name: "Mes Cours", icon: <FileText size={22} />, path: "/professeur/cours" },
-    { name: "Liste Étudiants", icon: <List size={22} />, path: "/professeur/etudiants" },
-    { name: "Historique", icon: <Clock size={22} />, path: "/professeur/historique" },
-    { name: "Modules", icon: <Settings size={22} />, path: "/professeur/modules" },
+    { name: "Dashboard", icon: <Upload size={22} />, path: "/etudiant/dashboard" },
+    { name: "Cours", icon: <FileText size={22} />, path: "/etudiant/cours" },
+    { name: "Liste des professeurs", icon: <List size={22} />, path: "/etudiant/etudiants" },
+    { name: "Historique", icon: <Clock size={22} />, path: "/etudiant/historique" },
+    { name: "Paramètres", icon: <Settings size={22} />, path: "/etudiant/parametres" },
   ];
 
   const handleLogout = async () => {

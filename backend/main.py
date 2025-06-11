@@ -6,6 +6,8 @@ from app.routers.auth import authRouter
 from app.routers.professeur.stt import sttRouter
 from app.routers.professeur.summarization import router as summarizationRouter
 from app.routers.professeur.cours import router as coursRouter
+from app.routers.professeur.module import router as moduleRouter
+from app.routers.etudiant.cours import router as etudiantCoursRouter
 from app.utils.protectRoute import get_current_user
 from app.db.schemas.user import UserOutput
 import os
@@ -35,6 +37,8 @@ app.include_router(router=authRouter, tags=["auth"], prefix="/auth")
 app.include_router(router=sttRouter, tags=["stt"], prefix="/stt")
 app.include_router(router=summarizationRouter, tags=["professeur"], prefix="/professeur")
 app.include_router(router=coursRouter, tags=["professeur"], prefix="/professeur")
+app.include_router(router=moduleRouter, tags=["professeur"], prefix="/professeur")
+app.include_router(router=etudiantCoursRouter, tags=["etudiant"], prefix="/etudiant")
 
 @app.get("/")
 def test():

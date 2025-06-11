@@ -25,6 +25,7 @@ import ProfessorLayout from "@/components/layout/ProfessorLayout";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { useRouter } from "next/router";
+import { withRoleGuard } from "@/utils/withRoleGuard";
 
 interface Course {
   id: string;
@@ -35,7 +36,7 @@ interface Course {
   summary: string;
 }
 
-export default function CoursesPage() {
+function ProfesseurPage() {
   const router = useRouter();
   const [courses, setCourses] = useState<Course[]>([]);
   const [filteredCourses, setFilteredCourses] = useState<Course[]>([]);
@@ -569,4 +570,6 @@ export default function CoursesPage() {
       </Dialog>
     </ProfessorLayout>
   );
-} 
+}
+
+export default withRoleGuard(ProfesseurPage, ["PROFESSEUR"]); 

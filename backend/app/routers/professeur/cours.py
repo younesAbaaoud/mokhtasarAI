@@ -17,14 +17,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 class CoursCreate(BaseModel):
-    module: str
+    module_id: int
     name: str
     transcription: str
     summary: str
 
 class CoursResponse(BaseModel):
     id: int
-    module: str
+    module_id: int
     name: str
     transcription: str
     summary: str
@@ -38,7 +38,7 @@ class CoursResponse(BaseModel):
         }
 
 class CoursUpdate(BaseModel):
-    module: Optional[str]
+    module_id: Optional[int]
     name: Optional[str]
     transcription: Optional[str]
     summary: Optional[str]
@@ -55,7 +55,7 @@ async def create_cours(
     cours_service = CoursService(db)
     try:
         new_cours = cours_service.create_cours(
-            module=cours.module,
+            module_id=cours.module_id,
             name=cours.name,
             transcription=cours.transcription,
             summary=cours.summary,
@@ -91,11 +91,16 @@ async def update_cours(
         raise HTTPException(status_code=403, detail="Only professors can update courses")
     
     logger.info(f"Attempting to update course {cours_id} for professor {current_user.id}")
-    logger.info(f"Update data: {cours_update.dict()}")
+    logger.info(f"Update data: {cours_update.dict(exclude_unset=True)}")  # Only include set fields
     
     cours_service = CoursService(db)
     try:
-        updated_cours = cours_service.update_cours(cours_id, cours_update.dict(), current_user.id)
+        # Use exclude_unset=True to only include fields that were actually provided
+        updated_cours = cours_service.update_cours(
+            cours_id, 
+            cours_update.dict(exclude_unset=True), 
+            current_user.id
+        )
         logger.info(f"Successfully updated course {cours_id}")
         return updated_cours
     except Exception as e:

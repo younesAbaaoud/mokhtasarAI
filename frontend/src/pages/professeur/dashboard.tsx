@@ -66,8 +66,9 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import ProfessorLayout from "@/components/layout/ProfessorLayout";
+import { withRoleGuard } from "@/utils/withRoleGuard";
 
-export default function ProfessorDashboard() {
+function ProfesseurDashboard() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<{ name: string; size: string; file: File } | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -92,6 +93,10 @@ export default function ProfessorDashboard() {
     type: string;
     transcription: string;
     summary: string;
+  }>>([]);
+  const [modules, setModules] = useState<Array<{
+    id: number;
+    name: string;
   }>>([]);
   const [selectedCourse, setSelectedCourse] = useState<any>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -255,7 +260,7 @@ export default function ProfessorDashboard() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          module: selectedModule,
+          module_id: parseInt(selectedModule), // Use module_id instead of module
           name: courseName,
           transcription: transcription,
           summary: summary
@@ -290,23 +295,7 @@ export default function ProfessorDashboard() {
       }
 
       // Refresh the courses list
-      const coursesResponse = await fetch('http://localhost:8000/professeur/cours', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (coursesResponse.ok) {
-        const courses = await coursesResponse.json();
-        const formattedCourses = courses.map((course: any) => ({
-          name: course.name,
-          type: course.module,
-          date: new Date(course.time_inserted).toLocaleDateString('fr-FR'),
-          transcription: course.transcription,
-          summary: course.summary
-        }));
-        setRecentUploads(formattedCourses);
-      }
+      await fetchCourses();
     } catch (error) {
       console.error('Save error:', error);
       toast.error(error instanceof Error ? error.message : "Erreur lors de l'enregistrement");
@@ -483,54 +472,98 @@ export default function ProfessorDashboard() {
     }
   };
 
-  // Add this new useEffect to fetch courses
-  useEffect(() => {
-    const fetchCourses = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-          toast.error("Session expirée. Veuillez vous reconnecter.");
-          localStorage.removeItem('token');
-          localStorage.removeItem('userRole');
-          router.push('/auth/login');
-          return;
-        }
-
-        const response = await fetch('http://localhost:8000/professeur/cours', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-
-        if (response.status === 401) {
-          toast.error("Session expirée. Veuillez vous reconnecter.");
-          localStorage.removeItem('token');
-          localStorage.removeItem('userRole');
-          router.push('/auth/login');
-          return;
-        }
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch courses');
-        }
-
-        const courses = await response.json();
-        // Transform the courses data to match the table format
-        const formattedCourses = courses.map((course: any) => ({
-          name: course.name,
-          type: course.module,
-          date: new Date(course.time_inserted).toLocaleDateString('fr-FR'),
-          transcription: course.transcription,
-          summary: course.summary
-        }));
-        setRecentUploads(formattedCourses);
-      } catch (error) {
-        console.error('Error fetching courses:', error);
-        toast.error("Erreur lors du chargement des cours");
+  // Fetch courses function
+  const fetchCourses = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        toast.error("Session expirée. Veuillez vous reconnecter.");
+        localStorage.removeItem('token');
+        localStorage.removeItem('userRole');
+        router.push('/auth/login');
+        return;
       }
-    };
 
+      const response = await fetch('http://localhost:8000/professeur/cours', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.status === 401) {
+        toast.error("Session expirée. Veuillez vous reconnecter.");
+        localStorage.removeItem('token');
+        localStorage.removeItem('userRole');
+        router.push('/auth/login');
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch courses');
+      }
+
+      const courses = await response.json();
+      // Transform the courses data to match the table format
+      const formattedCourses = courses.map((course: any) => ({
+        name: course.name,
+        type: course.module,
+        date: new Date(course.time_inserted).toLocaleDateString('fr-FR'),
+        transcription: course.transcription,
+        summary: course.summary
+      }));
+      setRecentUploads(formattedCourses);
+    } catch (error) {
+      console.error('Error fetching courses:', error);
+      toast.error("Erreur lors du chargement des cours");
+    }
+  };
+
+  // Fetch modules function
+  const fetchModules = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        toast.error("Session expirée. Veuillez vous reconnecter.");
+        localStorage.removeItem('token');
+        localStorage.removeItem('userRole');
+        router.push('/auth/login');
+        return;
+      }
+
+      const response = await fetch('http://localhost:8000/professeur/modules', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.status === 401) {
+        toast.error("Session expirée. Veuillez vous reconnecter.");
+        localStorage.removeItem('token');
+        localStorage.removeItem('userRole');
+        router.push('/auth/login');
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch modules');
+      }
+
+      const modulesData = await response.json();
+      setModules(modulesData);
+    } catch (error) {
+      console.error('Error fetching modules:', error);
+      toast.error("Erreur lors du chargement des modules");
+    }
+  };
+
+  // useEffect to fetch courses on component mount
+  useEffect(() => {
     fetchCourses();
+  }, []);
+
+  // useEffect to fetch modules on component mount
+  useEffect(() => {
+    fetchModules();
   }, []);
 
   // Update the cleanup effect
@@ -796,10 +829,15 @@ export default function ProfessorDashboard() {
                             <SelectValue placeholder="Sélectionner un module" />
                           </SelectTrigger>
                           <SelectContent className="bg-white border-gray-200 rounded-lg">
-                            <SelectItem value="ml" className="rounded-lg hover:bg-[#133E87]/10">Machine Learning</SelectItem>
-                            <SelectItem value="java" className="rounded-lg hover:bg-[#133E87]/10">Java</SelectItem>
-                            <SelectItem value="mobile" className="rounded-lg hover:bg-[#133E87]/10">Developpement Mobile</SelectItem>
-                            <SelectItem value="dl" className="rounded-lg hover:bg-[#133E87]/10">Deep Learning</SelectItem>
+                            {modules.map((module) => (
+                              <SelectItem 
+                                key={module.id} 
+                                value={module.id.toString()} 
+                                className="rounded-lg hover:bg-[#133E87]/10"
+                              >
+                                {module.name}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>
@@ -970,4 +1008,6 @@ export default function ProfessorDashboard() {
       </Dialog>
     </ProfessorLayout>
   );
-} 
+}
+
+export default withRoleGuard(ProfesseurDashboard, ["PROFESSEUR"]); 

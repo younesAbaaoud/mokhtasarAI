@@ -10,14 +10,14 @@ class CoursService:
 
     def create_cours(
         self,
-        module: str,
+        module_id: int,
         name: str,
         transcription: str,
         summary: str,
         professeur_id: int
     ) -> Cours:
         cours = Cours(
-            module=module,
+            module_id=module_id,  # Fixed: was using undefined 'module' instead of 'module_id'
             name=name,
             transcription=transcription,
             summary=summary,
@@ -46,8 +46,8 @@ class CoursService:
         # Update only the fields that are provided
         if cours_update.get('name') is not None:
             cours.name = cours_update['name']
-        if cours_update.get('module') is not None:
-            cours.module = cours_update['module']
+        if cours_update.get('module_id') is not None:  # Fixed: was 'module' instead of 'module_id'
+            cours.module_id = cours_update['module_id']
         if cours_update.get('transcription') is not None:
             cours.transcription = cours_update['transcription']
         if cours_update.get('summary') is not None:
@@ -75,4 +75,4 @@ class CoursService:
             self.db.commit()
         except Exception as e:
             self.db.rollback()
-            raise HTTPException(status_code=500, detail=str(e)) 
+            raise HTTPException(status_code=500, detail=str(e))
