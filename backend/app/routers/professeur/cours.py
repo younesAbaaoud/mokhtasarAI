@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.core.database import get_db
 from app.services.professeur.cours_service import CoursService
 from app.utils.protectRoute import get_current_user
 from app.db.models.cours import Cours
+from app.db.models.module import Module
 from app.db.schemas.user import UserOutput
 from pydantic import BaseModel
 from typing import Optional
@@ -15,6 +16,14 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+class ModuleInfo(BaseModel):
+    id: int
+    name: str
+    abreviation: str
+
+    class Config:
+        from_attributes = True
 
 class CoursCreate(BaseModel):
     module_id: int
@@ -30,6 +39,7 @@ class CoursResponse(BaseModel):
     summary: str
     professeur_id: int
     time_inserted: datetime
+    module: ModuleInfo
 
     class Config:
         from_attributes = True
@@ -75,7 +85,8 @@ async def get_professeur_cours(
     
     cours_service = CoursService(db)
     try:
-        cours = cours_service.get_cours_by_professeur(current_user.id)
+        # Join with Module table to get module information
+        cours = db.query(Cours).options(joinedload(Cours.module)).filter(Cours.professeur_id == current_user.id).all()
         return cours
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -126,3 +137,8 @@ async def delete_cours(
     except Exception as e:
         logger.error(f"Error deleting course {cours_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+
+
+

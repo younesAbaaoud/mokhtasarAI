@@ -30,7 +30,11 @@ import { withRoleGuard } from "@/utils/withRoleGuard";
 interface Course {
   id: string;
   name: string;
-  module: string;
+  module: {
+    id: number;
+    name: string;
+    abreviation: string;
+  };
   date: string;
   transcription: string;
   summary: string;
@@ -105,7 +109,7 @@ function ProfesseurPage() {
 
     // Filter by module
     if (selectedModule && selectedModule !== "all") {
-      filtered = filtered.filter(course => course.module === selectedModule);
+      filtered = filtered.filter(course => course.module.name === selectedModule);
     }
 
     // Filter by date
@@ -122,7 +126,7 @@ function ProfesseurPage() {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(course =>
         course.name.toLowerCase().includes(query) ||
-        course.module.toLowerCase().includes(query)
+        course.module.name.toLowerCase().includes(query)
       );
     }
 
@@ -331,7 +335,7 @@ function ProfesseurPage() {
                     <td className="py-3 pl-4 text-gray-900">{course.name}</td>
                     <td className="py-3">
                       <Badge variant="outline" className="border-[#133E87] text-[#133E87]">
-                        {course.module}
+                        {course.module.abreviation}
                       </Badge>
                     </td>
                     <td className="py-3 text-gray-500">
@@ -457,7 +461,12 @@ function ProfesseurPage() {
                 </div>
                 <div>
                   <h3 className="text-sm font-medium text-gray-500">Module</h3>
-                  <p className="mt-1 text-sm text-gray-900">{selectedCourse.module}</p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <Badge variant="outline" className="border-[#133E87] text-[#133E87]">
+                      {selectedCourse.module.abreviation}
+                    </Badge>
+                    <span className="text-sm text-gray-900">{selectedCourse.module.name}</span>
+                  </div>
                 </div>
                 <div>
                   <h3 className="text-sm font-medium text-gray-500">Date d'ajout</h3>
@@ -515,8 +524,8 @@ function ProfesseurPage() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700">Module</label>
                   <Select
-                    value={editingCourse.module}
-                    onValueChange={(value) => setEditingCourse({ ...editingCourse, module: value })}
+                    value={editingCourse.module.name}
+                    onValueChange={(value) => setEditingCourse({ ...editingCourse, module: { ...editingCourse.module, name: value } })}
                   >
                     <SelectTrigger className="bg-white border-gray-200">
                       <SelectValue placeholder="Sélectionner un module" />

@@ -67,38 +67,48 @@ import {
 } from "@/components/ui/dialog";
 import ProfessorLayout from "@/components/layout/ProfessorLayout";
 import { withRoleGuard } from "@/utils/withRoleGuard";
+import os from "os";
+
+interface Course {
+  id: number;
+  name: string;
+  module_id: number;
+  professeur_id: number;
+  transcription: string;
+  summary: string;
+  time_inserted: string;
+  module: {
+    id: number;
+    name: string;
+    abreviation: string;
+  };
+}
 
 function ProfesseurDashboard() {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [uploadedFile, setUploadedFile] = useState<{ name: string; size: string; file: File } | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<{ name: string; size: string; file: Blob } | null>(null);
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [completed, setCompleted] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
-  const [recordingInterval, setRecordingInterval] = useState<NodeJS.Timeout | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
+  const [recordingInterval, setRecordingInterval] = useState<NodeJS.Timeout | null>(null);
+  const [recordingStatusInterval, setRecordingStatusInterval] = useState<NodeJS.Timeout | null>(null);
+  const [pythonRecordingStatus, setPythonRecordingStatus] = useState(null);
   const [selectedModule, setSelectedModule] = useState("");
   const [courseName, setCourseName] = useState("");
   const [transcription, setTranscription] = useState<string>("");
   const [summary, setSummary] = useState<string>("");
   const [isSummarizing, setIsSummarizing] = useState(false);
-  const [recordingType, setRecordingType] = useState<'frontend' | 'python'>('frontend');
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [recordingChunks, setRecordingChunks] = useState<Blob[]>([]);
-  const [recentUploads, setRecentUploads] = useState<Array<{
-    name: string;
-    date: string;
-    status: string;
-    type: string;
-    transcription: string;
-    summary: string;
-  }>>([]);
+  const [recentUploads, setRecentUploads] = useState<Course[]>([]);
   const [modules, setModules] = useState<Array<{
     id: number;
     name: string;
   }>>([]);
-  const [selectedCourse, setSelectedCourse] = useState<any>(null);
+  const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const audioChunksRef = useRef<Blob[]>([]);
@@ -118,10 +128,12 @@ function ProfesseurDashboard() {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
       console.log('File selected:', file);
+      // Convert File to Blob
+      const blob = file.slice(0, file.size, file.type);
       setUploadedFile({
         name: file.name,
         size: (file.size / (1024 * 1024)).toFixed(2),
-        file: file
+        file: blob
       });
     }
   };
@@ -302,158 +314,333 @@ function ProfesseurDashboard() {
     }
   };
 
+  // Add a debug function
+  const debugLog = (message: string, data?: any) => {
+    console.log(`[Recording Debug] ${message}`, data || '');
+  };
+
+  // Add a cleanup lock to prevent multiple simultaneous cleanups
+  const [isCleaningUp, setIsCleaningUp] = useState(false);
+
+  // Simplified startRecording function
   const startRecording = async () => {
+    debugLog('Start recording clicked');
     try {
-      if (recordingType === 'frontend') {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const recorder = new MediaRecorder(stream);
-        const chunks: Blob[] = [];
+      debugLog('Getting auth token');
+      const token = localStorage.getItem('token');
+      if (!token) {
+        debugLog('No auth token found');
+        toast.error("Session expirée. Veuillez vous reconnecter.");
+        return;
+      }
 
-        recorder.ondataavailable = (e) => {
-          if (e.data.size > 0) {
-            chunks.push(e.data);
-          }
-        };
-
-        recorder.onstop = async () => {
-          const audioBlob = new Blob(chunks, { type: 'audio/wav' });
-          
-          // Save to local directory
-          try {
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const fileName = `cours_${timestamp}.wav`;
-            
-            // Create a download link
-            const url = URL.createObjectURL(audioBlob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = fileName;
-            
-            // Trigger download to Documents/CoursRecording
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            
-            toast.success('Recording saved locally');
-          } catch (error) {
-            console.error('Error saving recording locally:', error);
-            toast.error('Failed to save recording locally');
-          }
-
-          // Send for transcription
-          const formData = new FormData();
-          formData.append('audio_file', audioBlob, 'recording.wav');
-
-          try {
-            const response = await fetch('http://localhost:8000/stt/transcribe', {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${localStorage.getItem('token')}`,
-              },
-              body: formData,
-            });
-
-            if (!response.ok) {
-              throw new Error('Failed to transcribe audio');
-            }
-
-            const data = await response.json();
-            setTranscription(data.transcription);
-            toast.success('Recording transcribed successfully');
-          } catch (error) {
-            toast.error('Failed to transcribe recording');
-            console.error('Transcription error:', error);
-          }
-        };
-
-        recorder.start();
-        setMediaRecorder(recorder);
+      debugLog('Sending start recording request to backend');
+      const response = await fetch('http://localhost:8000/professeur/microphone/start-python-recorder', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+      });
+      
+      debugLog('Backend response status:', response.status);
+      const data = await response.json();
+      debugLog('Backend response data:', data);
+      
+      if (response.ok) {
+        debugLog('Recording started successfully');
         setIsRecording(true);
-        setRecordingDuration(0); // Reset duration when starting new recording
+        setRecordingDuration(0);
         
-        // Start the timer
+        // Start the timer for UI
         const timer = setInterval(() => {
           setRecordingDuration(prev => prev + 1);
         }, 1000);
-        
         setRecordingInterval(timer);
-        toast.success('Recording started');
+
+        // Start polling for recording status
+        debugLog('Starting status polling');
+        const statusInterval = setInterval(async () => {
+          try {
+            const statusResponse = await fetch('http://localhost:8000/professeur/microphone/recording-status', {
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            });
+            
+            if (statusResponse.ok) {
+              const status = await statusResponse.json();
+              debugLog('Recording status:', status);
+              setPythonRecordingStatus(status);
+              
+              // Update duration from server if available
+              if (status.duration) {
+                setRecordingDuration(Math.floor(status.duration));
+              }
+              
+              // If recording stopped on server side, update UI
+              if (!status.recording && isRecording) {
+                debugLog('Recording stopped on server side');
+                await stopRecording();
+              }
+            }
+          } catch (error) {
+            debugLog('Status check error:', error);
+          }
+        }, 2000);
+        
+        setRecordingStatusInterval(statusInterval);
+        
+        toast.success('Enregistrement démarré. Appuyez sur ESC pour arrêter.');
       } else {
-        // Python recording logic
-        const response = await fetch('http://localhost:8000/professeur/microphone/start-python-recorder', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          },
-        });
-        
-        const data = await response.json();
-        
-        if (response.ok) {
-          setIsRecording(true);
-          setRecordingDuration(0); // Reset duration when starting new recording
-          
-          // Start the timer
-          const timer = setInterval(() => {
-            setRecordingDuration(prev => prev + 1);
-          }, 1000);
-          
-          setRecordingInterval(timer);
-          toast.success(data.message || 'Recording started. Press Esc to stop recording.');
-        } else {
-          throw new Error(data.detail || 'Failed to start Python recorder');
-        }
+        debugLog('Start recording failed:', data);
+        throw new Error(data.detail || 'Échec du démarrage de l\'enregistrement');
       }
     } catch (error) {
+      debugLog('Recording error:', error);
       console.error('Error starting recording:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to start recording');
+      toast.error(error instanceof Error ? error.message : 'Échec du démarrage de l\'enregistrement');
     }
   };
 
+  // Update stopRecording to handle cleanup
   const stopRecording = async () => {
     try {
-      if (recordingType === 'frontend' && mediaRecorder) {
-        mediaRecorder.stop();
-        mediaRecorder.stream.getTracks().forEach(track => track.stop());
-        setMediaRecorder(null);
-        setIsRecording(false);
-        
-        // Clear the timer
-        if (recordingInterval) {
-          clearInterval(recordingInterval);
-          setRecordingInterval(null);
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No auth token available');
+      }
+
+      debugLog('Stopping recording');
+      const response = await fetch('http://localhost:8000/professeur/microphone/stop-python-recorder', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
-        
-        toast.success('Recording stopped');
-      } else {
-        // Python recording stop logic
-        const response = await fetch('http://localhost:8000/professeur/microphone/stop-python-recorder', {
-          method: 'POST',
+      });
+      
+      const data = await response.json();
+      debugLog('Stop recording response:', { status: response.status, data });
+      
+      if (!response.ok) {
+        // Handle specific error cases
+        if (response.status === 400) {
+          // If no recording was in progress, treat it as a success
+          if (data.message === "No recording was in progress") {
+            debugLog('No recording was in progress, treating as success');
+            setIsRecording(false);
+            setPythonRecordingStatus({ recording: false, duration: 0 });
+            return;
+          }
+        }
+        throw new Error(data.detail || `Failed to stop recording (${response.status})`);
+      }
+      
+      // Update UI state immediately
+      setIsRecording(false);
+      setPythonRecordingStatus({ recording: false, duration: 0 });
+      
+      // Clear intervals
+      if (recordingInterval) {
+        clearInterval(recordingInterval);
+        setRecordingInterval(null);
+      }
+      if (recordingStatusInterval) {
+        clearInterval(recordingStatusInterval);
+        setRecordingStatusInterval(null);
+      }
+      
+      toast.success(data.message || 'Recording stopped');
+      
+      // Download and process the recorded file if we have one
+      if (data.filename) {
+        try {
+          await downloadAndProcessPythonRecording(token);
+        } catch (downloadError) {
+          console.error('Error downloading recording:', downloadError);
+          toast.error('Failed to download recording, but it was saved on the server');
+          // Don't throw here, just log the error and continue with cleanup
+        }
+      }
+
+      // Finally, do the cleanup
+      debugLog('Cleaning up after recording');
+      try {
+        const cleanupResponse = await fetch('http://localhost:8000/professeur/microphone/cleanup', {
+          method: 'DELETE',
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Authorization': `Bearer ${token}`,
           },
         });
         
-        const data = await response.json();
-        
-        if (response.ok) {
-          setIsRecording(false);
-          
-          // Clear the timer
-          if (recordingInterval) {
-            clearInterval(recordingInterval);
-            setRecordingInterval(null);
-          }
-          
-          toast.success(data.message || 'Recording stopped');
+        if (cleanupResponse.ok) {
+          const cleanupData = await cleanupResponse.json();
+          debugLog('Cleanup successful:', cleanupData);
         } else {
-          throw new Error(data.detail || 'Failed to stop Python recorder');
+          debugLog('Cleanup failed:', cleanupResponse.status);
+          // Don't throw here, just log the error
         }
+      } catch (error) {
+        debugLog('Cleanup error:', error);
+        // Don't throw here, just log the error
+      } finally {
+        // Always reset states
+        setIsRecording(false);
+        setPythonRecordingStatus({ recording: false, duration: 0 });
+        setRecordingDuration(0);
       }
     } catch (error) {
       console.error('Error stopping recording:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to stop recording');
+      // Reset states even if there's an error
+      setIsRecording(false);
+      setPythonRecordingStatus({ recording: false, duration: 0 });
+      setRecordingDuration(0);
+    }
+  };
+
+  const downloadAndProcessPythonRecording = async (token: string): Promise<void> => {
+    try {
+      debugLog('Starting download of recording');
+      
+      // First check if the file exists
+      const statusResponse = await fetch('http://localhost:8000/professeur/microphone/recording-status', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!statusResponse.ok) {
+        throw new Error('Failed to get recording status');
+      }
+      
+      const status = await statusResponse.json();
+      debugLog('Recording status before download:', status);
+      
+      if (!status.filename) {
+        throw new Error('No recording file found');
+      }
+      
+      // Download the file
+      debugLog('Downloading recording file');
+      const response = await fetch('http://localhost:8000/professeur/microphone/download-recording', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'audio/wav'
+        },
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        debugLog('Download failed:', { status: response.status, error: errorText });
+        throw new Error(`Failed to download recording: ${errorText}`);
+      }
+      
+      debugLog('Download successful, processing response');
+      const headers = Object.fromEntries(response.headers.entries());
+      debugLog('Response headers:', headers);
+      
+      // Get filename from headers - try X-Filename first, then Content-Disposition
+      let fileName = status.filename; // Use filename from status as fallback
+      
+      // Try X-Filename header first
+      const xFilename = response.headers.get('X-Filename');
+      if (xFilename) {
+        debugLog('Found filename in X-Filename header:', xFilename);
+        fileName = xFilename;
+      } else {
+        // Try Content-Disposition header
+        const contentDisposition = response.headers.get('Content-Disposition');
+        if (contentDisposition) {
+          debugLog('Content-Disposition header:', contentDisposition);
+          // Try extended format first (filename*=UTF-8'')
+          const extendedMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/);
+          if (extendedMatch && extendedMatch[1]) {
+            fileName = decodeURIComponent(extendedMatch[1]);
+            debugLog('Found filename in extended Content-Disposition:', fileName);
+          } else {
+            // Try standard format (filename="...")
+            const standardMatch = contentDisposition.match(/filename="([^"]+)"/);
+            if (standardMatch && standardMatch[1]) {
+              fileName = standardMatch[1];
+              debugLog('Found filename in standard Content-Disposition:', fileName);
+            }
+          }
+        }
+      }
+      
+      debugLog('Final filename to be used:', fileName);
+      
+      // Get the blob and update UI
+      const blob = await response.blob();
+      debugLog('Blob received:', { size: blob.size, type: blob.type });
+      
+      if (blob.size === 0) {
+        throw new Error('Downloaded file is empty');
+      }
+      
+      // Update the UI with the recorded file
+      setUploadedFile({
+        name: fileName,
+        size: (blob.size / (1024 * 1024)).toFixed(2),
+        file: blob
+      });
+      
+      toast.success('Recording downloaded successfully. Click "Traiter l\'audio" to process it.');
+    } catch (error) {
+      console.error('Error in download:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to download recording');
+    }
+  };
+
+  const processRecordedAudio = async (audioBlob: Blob): Promise<void> => {
+    try {
+      const formData = new FormData();
+      formData.append('audio_file', audioBlob, 'recording.wav');
+
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:8000/stt/transcribe', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to transcribe audio');
+      }
+
+      const data = await response.json();
+      setTranscription(data.transcription);
+      
+      // Generate summary
+      setIsSummarizing(true);
+      const summaryResponse = await fetch('http://localhost:8000/professeur/summarization', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          text: data.transcription
+        })
+      });
+
+      if (summaryResponse.ok) {
+        const summaryData = await summaryResponse.json();
+        setSummary(summaryData.summary);
+        setCompleted(true);
+      }
+      
+      toast.success('Recording processed successfully');
+    } catch (error) {
+      toast.error('Failed to process recording');
+      console.error('Processing error:', error);
+    } finally {
+      setIsSummarizing(false);
     }
   };
 
@@ -503,15 +690,9 @@ function ProfesseurDashboard() {
       }
 
       const courses = await response.json();
-      // Transform the courses data to match the table format
-      const formattedCourses = courses.map((course: any) => ({
-        name: course.name,
-        type: course.module,
-        date: new Date(course.time_inserted).toLocaleDateString('fr-FR'),
-        transcription: course.transcription,
-        summary: course.summary
-      }));
-      setRecentUploads(formattedCourses);
+      console.log('Received courses from backend:', courses); // Debug log
+      console.log('First course module:', courses[0]?.module); // Debug log for first course's module
+      setRecentUploads(courses);
     } catch (error) {
       console.error('Error fetching courses:', error);
       toast.error("Erreur lors du chargement des cours");
@@ -625,44 +806,6 @@ function ProfesseurDashboard() {
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
-    };
-  }, [isRecording]);
-
-  // Add permission change handler
-  const handlePermissionChange = (event: Event) => {
-    const permissionStatus = event.target as PermissionStatus;
-    if (permissionStatus.state === 'granted') {
-      startRecording();
-    } else {
-      stopRecording();
-    }
-  };
-
-  useEffect(() => {
-    if (typeof navigator !== 'undefined' && navigator.permissions) {
-      navigator.permissions.query({ name: 'microphone' as PermissionName })
-        .then(permissionStatus => {
-          permissionStatus.addEventListener('change', handlePermissionChange);
-          return () => {
-            permissionStatus.removeEventListener('change', handlePermissionChange);
-          };
-        });
-    }
-  }, []);
-
-  // Add beforeunload handler to warn about closing browser
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (isRecording) {
-        e.preventDefault();
-        e.returnValue = "Recording is in progress. Are you sure you want to close?";
-        return e.returnValue;
-      }
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, [isRecording]);
 
@@ -903,7 +1046,7 @@ function ProfesseurDashboard() {
                   <th className="text-left font-medium py-2 text-[#133E87]">
                     <div className="flex items-center">
                       <Tag size={16} className="mr-2" />
-                      <span>Type</span>
+                      <span>Module</span>
                     </div>
                   </th>
                   <th className="text-left font-medium py-2 text-[#133E87]">
@@ -927,39 +1070,43 @@ function ProfesseurDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {recentUploads.map((upload, index) => (
-                  <tr
-                    key={index}
-                    className="border-b border-gray-200 hover:bg-[#133E87]/5 transition-colors"
-                  >
-                    <td className="py-3 pl-2 text-gray-900 rounded-bl-lg">{upload.name}</td>
-                    <td className="py-3 text-gray-900">
-                      <Badge variant="outline" className="border-[#133E87] text-[#133E87] rounded-lg">
-                        {upload.type}
-                      </Badge>
-                    </td>
-                    <td className="py-3 text-gray-500">{upload.date}</td>
-                    <td className="py-3 text-gray-900">
-                      <p className="text-sm line-clamp-1">
-                        {upload.transcription ? upload.transcription.substring(0, 50) + "..." : "Aucune transcription"}
-                      </p>
-                    </td>
-                    <td className="py-3 pr-2 rounded-br-lg">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedCourse(upload);
-                          setIsModalOpen(true);
-                        }}
-                        className="text-[#133E87] hover:bg-[#133E87]/10 rounded-lg"
-                      >
-                        <List size={16} className="mr-2" />
-                        Voir détails
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
+                {recentUploads.map((course, index) => {
+                  console.log('Rendering course:', course); // Debug log for each course
+                  console.log('Course module:', course.module); // Debug log for module
+                  return (
+                    <tr
+                      key={index}
+                      className="border-b border-gray-200 hover:bg-[#133E87]/5 transition-colors"
+                    >
+                      <td className="py-3 pl-2 text-gray-900 rounded-bl-lg">{course.name}</td>
+                      <td className="py-3 text-gray-900">
+                        <Badge variant="outline" className="border-[#133E87] text-[#133E87] rounded-lg">
+                          {typeof course.module === 'object' ? course.module.abreviation : course.module}
+                        </Badge>
+                      </td>
+                      <td className="py-3 text-gray-500">{new Date(course.time_inserted).toLocaleDateString('fr-FR')}</td>
+                      <td className="py-3 text-gray-900">
+                        <p className="text-sm line-clamp-1">
+                          {course.transcription ? course.transcription.substring(0, 50) + "..." : "Aucune transcription"}
+                        </p>
+                      </td>
+                      <td className="py-3 pr-2 rounded-br-lg">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedCourse(course);
+                            setIsModalOpen(true);
+                          }}
+                          className="text-[#133E87] hover:bg-[#133E87]/10 rounded-lg"
+                        >
+                          <List size={16} className="mr-2" />
+                          Voir détails
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -983,11 +1130,20 @@ function ProfesseurDashboard() {
                 </div>
                 <div>
                   <h3 className="text-sm font-medium text-gray-500">Module</h3>
-                  <p className="mt-1 text-sm text-gray-900">{selectedCourse.type}</p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <Badge variant="outline" className="border-[#133E87] text-[#133E87]">
+                      {typeof selectedCourse.module === 'object' ? selectedCourse.module.abreviation : selectedCourse.module}
+                    </Badge>
+                    {typeof selectedCourse.module === 'object' && (
+                      <span className="text-sm text-gray-900">{selectedCourse.module.name}</span>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <h3 className="text-sm font-medium text-gray-500">Date d'ajout</h3>
-                  <p className="mt-1 text-sm text-gray-900">{selectedCourse.date}</p>
+                  <p className="mt-1 text-sm text-gray-900">
+                    {new Date(selectedCourse.time_inserted).toLocaleDateString('fr-FR')}
+                  </p>
                 </div>
               </div>
               <div className="pt-4 border-t border-gray-200">
